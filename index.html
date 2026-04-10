@@ -3,79 +3,360 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Design Size Tool</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Image Measurement Tool (v1)</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --line: #d7deea;
+      --text: #1d2430;
+      --muted: #5d6b80;
+      --primary: #2359ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app {
+      max-width: 1120px;
+      margin: 24px auto;
+      padding: 0 16px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(12, 25, 48, 0.06);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.5rem;
+    }
+
+    .lead {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .control {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .control label {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .control input,
+    .control select,
+    .control button {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 10px;
+      background: #fff;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    .control button {
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .control button.primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .canvas-wrap {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f0f3f8;
+      overflow: hidden;
+      position: relative;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      cursor: crosshair;
+      user-select: none;
+    }
+
+    .status-row {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    #hint {
+      font-weight: 600;
+      color: #8a5b00;
+    }
+
+    .span-3 { grid-column: span 3; }
+    .span-2 { grid-column: span 2; }
+
+    @media (max-width: 900px) {
+      .controls { grid-template-columns: repeat(6, 1fr); }
+      .span-3, .span-2 { grid-column: span 3; }
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Design Size Tool</h1>
+  <main class="app">
+    <section class="panel">
+      <h1>Image Measurement Tool</h1>
+      <p class="lead">
+        Upload an image, draw a reference line with known size, then measure anything else.
+      </p>
 
-    <div class="dropdowns">
-      <label for="unitSelect">Select Units:</label>
-      <select id="unitSelect">
-        <option value="in">Inches</option>
-        <option value="cm">Centimeters</option>
-      </select>
-    </div>
-
-    <!-- Instructions collapsible -->
-    <div class="collapsible">
-      <h3 onclick="toggleInstructions()">
-        Instructions <span id="instructionsArrow">▼</span>
-      </h3>
-      <div id="instructionText" class="content"></div>
-    </div>
-
-    <form id="calcForm">
-      <div class="pairs-container">
-
-        <!-- Known Measure -->
-        <div class="pair-card">
-          <h3 class="pair-title">Known Measure</h3>
-          <div class="pair-body">
-            <div class="input-group">
-              <label id="labelA" for="actual">Known Real-Life Length (in):</label>
-              <input type="number" id="actual" required step="any" />
-            </div>
-            <div class="input-group">
-              <label id="labelS" for="screen">Corresponding On-Screen Length (in):</label>
-              <input type="number" id="screen" required step="any" />
-            </div>
-          </div>
+      <div class="controls">
+        <div class="control span-3">
+          <label for="imageInput">Image upload</label>
+          <input id="imageInput" type="file" accept="image/*" />
         </div>
 
-        <!-- Unknown Measure -->
-        <div class="pair-card">
-          <h3 class="pair-title">Unknown Measure</h3>
-          <div class="pair-body">
-            <div class="input-group">
-              <label id="labelE" for="element">On-screen Length in Question (in):</label>
-              <input type="number" id="element" required step="any" />
-            </div>
-            <div class="input-group">
-              <label>Corresponding Real-Life Length in Question</label>
-              <div id="result" class="result-box"></div>
-            </div>
-          </div>
+        <div class="control span-2">
+          <label for="referenceValue">Reference value</label>
+          <input id="referenceValue" type="number" min="0" step="any" placeholder="e.g. 5" disabled />
         </div>
 
+        <div class="control span-2">
+          <label for="referenceUnit">Reference unit</label>
+          <select id="referenceUnit" disabled>
+            <option value="in">inches</option>
+            <option value="cm">centimeters</option>
+          </select>
+        </div>
+
+        <div class="control span-2">
+          <label>&nbsp;</label>
+          <button id="setReferenceBtn" class="primary" disabled>Set Reference</button>
+        </div>
+
+        <div class="control span-2">
+          <label>Zoom</label>
+          <button id="zoomInBtn" type="button" disabled>Zoom +</button>
+        </div>
+
+        <div class="control span-2">
+          <label>&nbsp;</label>
+          <button id="zoomOutBtn" type="button" disabled>Zoom -</button>
+        </div>
+
+        <div class="control span-2">
+          <label>&nbsp;</label>
+          <button id="undoBtn" type="button" disabled>Undo Last</button>
+        </div>
+
+        <div class="control span-2">
+          <label>&nbsp;</label>
+          <button id="clearBtn" type="button" disabled>Clear Lines</button>
+        </div>
+
+        <div class="control span-2">
+          <label>&nbsp;</label>
+          <button id="resetBtn" type="button" disabled>Reset All</button>
+        </div>
       </div>
 
-      <button type="submit">Calculate</button>
-    </form>
-
-    <!-- Diagram collapsible -->
-    <div class="collapsible">
-      <h3 onclick="toggleDiagram()">
-        Diagram <span id="diagramArrow">▼</span>
-      </h3>
-      <div id="diagramWrapper" class="content">
-        <canvas id="diagramCanvas" width="400" height="400"></canvas>
+      <div class="canvas-wrap">
+        <canvas id="measureCanvas" width="1000" height="620"></canvas>
       </div>
-    </div>
 
-  </div>
+      <div class="status-row">
+        <div id="status">Status: Upload an image to begin.</div>
+        <div id="hint">Hint: Draw a reference line first.</div>
+      </div>
+    </section>
+  </main>
 
-  <script src="script.js"></script>
+  <script>
+    const imageInput = document.getElementById('imageInput');
+    const referenceValue = document.getElementById('referenceValue');
+    const referenceUnit = document.getElementById('referenceUnit');
+    const setReferenceBtn = document.getElementById('setReferenceBtn');
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const status = document.getElementById('status');
+    const hint = document.getElementById('hint');
+
+    const canvas = document.getElementById('measureCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const state = {
+      image: null,
+      viewport: {
+        zoom: 1,
+        minZoom: 0.2,
+        maxZoom: 4,
+        baseScale: 1,
+        offsetX: 0,
+        offsetY: 0
+      }
+    };
+
+    function setStatus(text) {
+      status.textContent = `Status: ${text}`;
+    }
+
+    function setControlsEnabled(enabled) {
+      referenceValue.disabled = !enabled;
+      referenceUnit.disabled = !enabled;
+      setReferenceBtn.disabled = !enabled;
+      zoomInBtn.disabled = !enabled;
+      zoomOutBtn.disabled = !enabled;
+      undoBtn.disabled = !enabled;
+      clearBtn.disabled = !enabled;
+      resetBtn.disabled = !enabled;
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function fitImageToCanvas() {
+      if (!state.image) return;
+
+      const img = state.image;
+      const fitX = canvas.width / img.width;
+      const fitY = canvas.height / img.height;
+      const baseScale = Math.min(fitX, fitY);
+
+      state.viewport.baseScale = baseScale;
+      state.viewport.zoom = 1;
+
+      const drawWidth = img.width * baseScale;
+      const drawHeight = img.height * baseScale;
+
+      state.viewport.offsetX = (canvas.width - drawWidth) / 2;
+      state.viewport.offsetY = (canvas.height - drawHeight) / 2;
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (!state.image) {
+        ctx.fillStyle = '#95a2b3';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Upload an image to begin', canvas.width / 2, canvas.height / 2);
+        return;
+      }
+
+      const img = state.image;
+      const totalScale = state.viewport.baseScale * state.viewport.zoom;
+      const drawWidth = img.width * totalScale;
+      const drawHeight = img.height * totalScale;
+
+      ctx.drawImage(
+        img,
+        state.viewport.offsetX,
+        state.viewport.offsetY,
+        drawWidth,
+        drawHeight
+      );
+    }
+
+    function loadImageFromFile(file) {
+      const url = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        state.image = image;
+        fitImageToCanvas();
+        draw();
+        URL.revokeObjectURL(url);
+        setControlsEnabled(true);
+        setStatus('Image loaded. Next: draw a reference line.');
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        setStatus('Could not load image. Try another file.');
+      };
+      image.src = url;
+    }
+
+    imageInput.addEventListener('change', (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      loadImageFromFile(file);
+    });
+
+    zoomInBtn.addEventListener('click', () => {
+      if (!state.image) return;
+      state.viewport.zoom = clamp(state.viewport.zoom * 1.2, state.viewport.minZoom, state.viewport.maxZoom);
+      draw();
+      setStatus(`Zoom: ${(state.viewport.zoom * 100).toFixed(0)}%`);
+    });
+
+    zoomOutBtn.addEventListener('click', () => {
+      if (!state.image) return;
+      state.viewport.zoom = clamp(state.viewport.zoom / 1.2, state.viewport.minZoom, state.viewport.maxZoom);
+      draw();
+      setStatus(`Zoom: ${(state.viewport.zoom * 100).toFixed(0)}%`);
+    });
+
+    setReferenceBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      setStatus('Reference setup arrives in Stage 2.');
+    });
+
+    undoBtn.addEventListener('click', () => {
+      setStatus('Undo arrives in a later stage.');
+    });
+
+    clearBtn.addEventListener('click', () => {
+      setStatus('Clear lines arrives in a later stage.');
+    });
+
+    resetBtn.addEventListener('click', () => {
+      state.image = null;
+      state.viewport.zoom = 1;
+      state.viewport.baseScale = 1;
+      state.viewport.offsetX = 0;
+      state.viewport.offsetY = 0;
+      imageInput.value = '';
+      referenceValue.value = '';
+      referenceUnit.value = 'in';
+      setControlsEnabled(false);
+      setStatus('Reset complete. Upload a new image.');
+      hint.textContent = 'Hint: Draw a reference line first.';
+      draw();
+    });
+
+    setControlsEnabled(false);
+    draw();
+  </script>
 </body>
 </html>

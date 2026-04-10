@@ -1,16 +1,22 @@
-# Design Size Calculator
+# Image Measurement Tool (v1 in progress)
 
-This tool helps estimate the real-life size of a design element based on a known full length measurement and on-screen measurements.
+A lightweight browser tool to measure real-world lengths inside an uploaded image.
 
-## How to Use
-1. Choose your unit (inches or centimeters).
-2. Enter:
-   - TRUE full product length (e.g., 40 inches)
-   - On-screen full length of the product
-   - On-screen length of the design element
-3. Click "Calculate".
+## Current progress
+- Stage 0/1 complete:
+  - Single-file app (`index.html`) with embedded CSS and JavaScript.
+  - Image upload + canvas rendering.
+  - Auto-fit image to canvas while preserving aspect ratio.
+  - Basic zoom in/out controls.
+  - Status/hint text and placeholder controls for upcoming stages.
 
-The result will show the **estimated real-life length of the design element**.
+## Run locally
+1. Open `index.html` directly in Google Chrome.
+2. Upload an image.
+3. Use Zoom + / Zoom - to inspect fit.
 
----
-Created for internal use by Zazzle Customer Care Representatives.
+## Next stages
+- Draw lines by click-drag-release.
+- Set reference line + known value (in/cm).
+- Measure additional lines in both inches and centimeters.
+- Undo last line, clear lines, reset all.
