@@ -49,10 +49,11 @@
     }
 
     .controls {
-      display: grid;
-      grid-template-columns: repeat(12, 1fr);
+      display: flex;
+      align-items: flex-end;
       gap: 10px;
       margin-bottom: 12px;
+      flex-wrap: wrap;
     }
 
     .control {
@@ -90,10 +91,11 @@
     }
 
     .control button.zoom-btn {
-      min-height: 32px;
+      min-height: 36px;
       padding: 0 8px;
-      font-size: 0.82rem;
+      font-size: 0.88rem;
       flex: 1;
+      min-width: 84px;
     }
 
     .control button.primary {
@@ -109,6 +111,50 @@
       overflow: hidden;
       position: relative;
     }
+
+    .pan-pad {
+      position: absolute;
+      left: 14px;
+      bottom: 14px;
+      width: 92px;
+      height: 92px;
+      border-radius: 50%;
+      border: 1px solid #a7b4c7;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(2px);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      place-items: center;
+      z-index: 5;
+    }
+
+    .pan-btn {
+      width: 28px;
+      height: 28px;
+      border: 1px solid #c6cfdd;
+      border-radius: 999px;
+      background: #fff;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      color: #334155;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .pan-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .pan-up { grid-column: 2; grid-row: 1; }
+    .pan-left { grid-column: 1; grid-row: 2; }
+    .pan-center { grid-column: 2; grid-row: 2; width: 18px; height: 18px; border-radius: 999px; background: #cfd8e6; }
+    .pan-right { grid-column: 3; grid-row: 2; }
+    .pan-down { grid-column: 2; grid-row: 3; }
 
     canvas {
       display: block;
@@ -133,13 +179,13 @@
       color: #8a5b00;
     }
 
-    .span-3 { grid-column: span 3; }
-    .span-2 { grid-column: span 2; }
-
-    @media (max-width: 900px) {
-      .controls { grid-template-columns: repeat(6, 1fr); }
-      .span-3, .span-2 { grid-column: span 3; }
-    }
+    .control.file-upload { min-width: 260px; }
+    .control.reference-value { min-width: 130px; }
+    .control.reference-unit { min-width: 140px; }
+    .control.set-ref { min-width: 126px; }
+    .control.zoom-group { min-width: 190px; }
+    .controls-spacer { flex: 1; min-width: 20px; }
+    .control.actions { min-width: 108px; }
   </style>
 </head>
 <body>
@@ -151,17 +197,17 @@
       </p>
 
       <div class="controls">
-        <div class="control span-3">
+        <div class="control file-upload">
           <label for="imageInput">Image upload</label>
           <input id="imageInput" type="file" accept="image/*" />
         </div>
 
-        <div class="control span-2">
+        <div class="control reference-value">
           <label for="referenceValue">Reference value</label>
           <input id="referenceValue" type="number" min="0" step="any" placeholder="e.g. 5" disabled />
         </div>
 
-        <div class="control span-2">
+        <div class="control reference-unit">
           <label for="referenceUnit">Reference unit</label>
           <select id="referenceUnit" disabled>
             <option value="in">inches</option>
@@ -169,12 +215,12 @@
           </select>
         </div>
 
-        <div class="control span-2">
+        <div class="control set-ref">
           <label>&nbsp;</label>
           <button id="setReferenceBtn" class="primary" disabled>Set Reference</button>
         </div>
 
-        <div class="control span-2">
+        <div class="control zoom-group">
           <label>Zoom</label>
           <div class="btn-row">
             <button id="zoomInBtn" class="zoom-btn" type="button" disabled>Zoom +</button>
@@ -182,17 +228,19 @@
           </div>
         </div>
 
-        <div class="control span-2">
+        <div class="controls-spacer"></div>
+
+        <div class="control actions">
           <label>&nbsp;</label>
           <button id="undoBtn" type="button" disabled>Undo Last</button>
         </div>
 
-        <div class="control span-2">
+        <div class="control actions">
           <label>&nbsp;</label>
           <button id="clearBtn" type="button" disabled>Clear Lines</button>
         </div>
 
-        <div class="control span-2">
+        <div class="control actions">
           <label>&nbsp;</label>
           <button id="resetBtn" type="button" disabled>Reset All</button>
         </div>
@@ -200,6 +248,13 @@
 
       <div class="canvas-wrap">
         <canvas id="measureCanvas" width="1000" height="620"></canvas>
+        <div class="pan-pad" aria-label="Image nudge controls">
+          <button id="panUpBtn" class="pan-btn pan-up" type="button" disabled>^</button>
+          <button id="panLeftBtn" class="pan-btn pan-left" type="button" disabled>&lt;</button>
+          <div class="pan-center" aria-hidden="true"></div>
+          <button id="panRightBtn" class="pan-btn pan-right" type="button" disabled>&gt;</button>
+          <button id="panDownBtn" class="pan-btn pan-down" type="button" disabled>v</button>
+        </div>
       </div>
 
       <div class="status-row">
@@ -219,6 +274,10 @@
     const undoBtn = document.getElementById('undoBtn');
     const clearBtn = document.getElementById('clearBtn');
     const resetBtn = document.getElementById('resetBtn');
+    const panUpBtn = document.getElementById('panUpBtn');
+    const panLeftBtn = document.getElementById('panLeftBtn');
+    const panRightBtn = document.getElementById('panRightBtn');
+    const panDownBtn = document.getElementById('panDownBtn');
     const status = document.getElementById('status');
     const hint = document.getElementById('hint');
 
@@ -234,13 +293,6 @@
         baseScale: 1,
         offsetX: 0,
         offsetY: 0
-      },
-      pan: {
-        active: false,
-        startX: 0,
-        startY: 0,
-        originOffsetX: 0,
-        originOffsetY: 0
       }
     };
 
@@ -257,6 +309,10 @@
       undoBtn.disabled = !enabled;
       clearBtn.disabled = !enabled;
       resetBtn.disabled = !enabled;
+      panUpBtn.disabled = !enabled;
+      panLeftBtn.disabled = !enabled;
+      panRightBtn.disabled = !enabled;
+      panDownBtn.disabled = !enabled;
     }
 
     function clamp(value, min, max) {
@@ -384,32 +440,17 @@
       zoomAtCanvasPoint(state.viewport.zoom * zoomFactor, point.canvasX, point.canvasY);
     }, { passive: false });
 
-    canvas.addEventListener('mousedown', (event) => {
+    function nudgeImage(deltaX, deltaY) {
       if (!state.image) return;
-      state.pan.active = true;
-      state.pan.startX = event.clientX;
-      state.pan.startY = event.clientY;
-      state.pan.originOffsetX = state.viewport.offsetX;
-      state.pan.originOffsetY = state.viewport.offsetY;
-      canvas.style.cursor = 'grabbing';
-    });
-
-    window.addEventListener('mousemove', (event) => {
-      if (!state.image || !state.pan.active) return;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-
-      state.viewport.offsetX = state.pan.originOffsetX + (event.clientX - state.pan.startX) * scaleX;
-      state.viewport.offsetY = state.pan.originOffsetY + (event.clientY - state.pan.startY) * scaleY;
+      state.viewport.offsetX += deltaX;
+      state.viewport.offsetY += deltaY;
       draw();
-    });
+    }
 
-    window.addEventListener('mouseup', () => {
-      if (!state.pan.active) return;
-      state.pan.active = false;
-      canvas.style.cursor = 'crosshair';
-    });
+    panLeftBtn.addEventListener('click', () => nudgeImage(-24, 0));
+    panRightBtn.addEventListener('click', () => nudgeImage(24, 0));
+    panUpBtn.addEventListener('click', () => nudgeImage(0, -24));
+    panDownBtn.addEventListener('click', () => nudgeImage(0, 24));
 
     setReferenceBtn.addEventListener('click', (event) => {
       event.preventDefault();
