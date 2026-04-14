@@ -289,6 +289,8 @@
 
     const state = {
       image: null,
+      lines: [],
+      draftLine: null,
       viewport: {
         zoom: 1,
         minZoom: 0.2,
@@ -354,6 +356,41 @@
       };
     }
 
+    function imageToCanvasPoint(imageX, imageY) {
+      const totalScale = state.viewport.baseScale * state.viewport.zoom;
+      return {
+        x: state.viewport.offsetX + imageX * totalScale,
+        y: state.viewport.offsetY + imageY * totalScale
+      };
+    }
+
+    function drawLineOverlay(line, index) {
+      const start = imageToCanvasPoint(line.startX, line.startY);
+      const end = imageToCanvasPoint(line.endX, line.endY);
+      const midX = (start.x + end.x) / 2;
+      const midY = (start.y + end.y) / 2;
+      const strokeColor = line.type === 'reference' ? '#d97706' : '#2563eb';
+
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+
+      ctx.fillStyle = strokeColor;
+      ctx.beginPath();
+      ctx.arc(start.x, start.y, 3, 0, Math.PI * 2);
+      ctx.arc(end.x, end.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      const label = line.type === 'reference' ? 'Reference line (set known size next)' : `Line ${index}`;
+      ctx.fillText(label, midX, midY - 6);
+    }
+
     function zoomAtCanvasPoint(targetZoom, centerCanvasX, centerCanvasY) {
       if (!state.image) return;
 
@@ -397,6 +434,11 @@
         drawWidth,
         drawHeight
       );
+
+      state.lines.forEach((line, index) => drawLineOverlay(line, index + 1));
+      if (state.draftLine) {
+        drawLineOverlay(state.draftLine, state.lines.length + 1);
+      }
     }
 
     function loadImageFromFile(file) {
@@ -404,6 +446,8 @@
       const image = new Image();
       image.onload = () => {
         state.image = image;
+        state.lines = [];
+        state.draftLine = null;
         fitImageToCanvas();
         draw();
         URL.revokeObjectURL(url);
@@ -455,6 +499,53 @@
     panUpBtn.addEventListener('click', () => nudgeImage(0, -24));
     panDownBtn.addEventListener('click', () => nudgeImage(0, 24));
 
+    canvas.addEventListener('mousedown', (event) => {
+      if (!state.image) return;
+      const point = toImagePoint(event.clientX, event.clientY);
+      const lineType = state.lines.length === 0 ? 'reference' : 'measurement';
+
+      hint.textContent = '';
+      state.draftLine = {
+        type: lineType,
+        startX: point.imageX,
+        startY: point.imageY,
+        endX: point.imageX,
+        endY: point.imageY
+      };
+      draw();
+    });
+
+    canvas.addEventListener('mousemove', (event) => {
+      if (!state.image || !state.draftLine) return;
+      const point = toImagePoint(event.clientX, event.clientY);
+      state.draftLine.endX = point.imageX;
+      state.draftLine.endY = point.imageY;
+      draw();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!state.image || !state.draftLine) return;
+      const line = state.draftLine;
+      const dx = line.endX - line.startX;
+      const dy = line.endY - line.startY;
+      const pixelLength = Math.hypot(dx, dy);
+      state.draftLine = null;
+
+      if (pixelLength < 3) {
+        draw();
+        return;
+      }
+
+      state.lines.push(line);
+      draw();
+
+      if (line.type === 'reference') {
+        setStatus('Reference line drawn. Enter known value in Stage 3 flow.');
+      } else {
+        setStatus(`Line ${state.lines.length} added. Measurements arrive in Stage 4.`);
+      }
+    });
+
     setReferenceBtn.addEventListener('click', (event) => {
       event.preventDefault();
       setStatus('Reference setup arrives in Stage 2.');
@@ -470,6 +561,8 @@
 
     resetBtn.addEventListener('click', () => {
       state.image = null;
+      state.lines = [];
+      state.draftLine = null;
       state.viewport.zoom = 1;
       state.viewport.baseScale = 1;
       state.viewport.offsetX = 0;
