@@ -292,6 +292,12 @@
       lines: [],
       draftLine: null,
       endpointDrag: null,
+      selectedLineIndex: null,
+      scaleInchesPerImagePixel: null,
+      reference: {
+        lineIndex: null,
+        knownInches: null
+      },
       viewport: {
         zoom: 1,
         minZoom: 0.2,
@@ -365,7 +371,7 @@
       };
     }
 
-    function drawLineOverlay(line, index) {
+    function drawLineOverlay(line, index, isSelected = false) {
       const start = imageToCanvasPoint(line.startX, line.startY);
       const end = imageToCanvasPoint(line.endX, line.endY);
       const midX = (start.x + end.x) / 2;
@@ -376,7 +382,7 @@
       ctx.moveTo(start.x, start.y);
       ctx.lineTo(end.x, end.y);
       ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 2.4;
+      ctx.lineWidth = isSelected ? 3.4 : 2.4;
       ctx.stroke();
 
       ctx.fillStyle = strokeColor;
@@ -388,7 +394,13 @@
       ctx.font = '12px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      const label = line.type === 'reference' ? 'Reference line (set known size next)' : `Line ${index}`;
+      const refInches = state.reference.knownInches;
+      const refCm = refInches ? refInches * 2.54 : null;
+      const label = line.type === 'reference'
+        ? (refInches
+          ? `Reference: ${refInches.toFixed(2)} in / ${refCm.toFixed(2)} cm`
+          : 'Reference line (set known size next)')
+        : `Line ${index}`;
       ctx.fillText(label, midX, midY - 6);
     }
 
@@ -408,6 +420,53 @@
         }
       }
       return null;
+    }
+
+    function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const segmentLengthSq = dx * dx + dy * dy;
+      if (segmentLengthSq === 0) return Math.hypot(px - x1, py - y1);
+      const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / segmentLengthSq));
+      const projX = x1 + t * dx;
+      const projY = y1 + t * dy;
+      return Math.hypot(px - projX, py - projY);
+    }
+
+    function findLineHit(canvasX, canvasY) {
+      const hitThreshold = 7;
+      for (let i = state.lines.length - 1; i >= 0; i -= 1) {
+        const line = state.lines[i];
+        const start = imageToCanvasPoint(line.startX, line.startY);
+        const end = imageToCanvasPoint(line.endX, line.endY);
+        const dist = pointToSegmentDistance(canvasX, canvasY, start.x, start.y, end.x, end.y);
+        if (dist <= hitThreshold) {
+          return i;
+        }
+      }
+      return null;
+    }
+
+    function lineLengthInImagePixels(line) {
+      return Math.hypot(line.endX - line.startX, line.endY - line.startY);
+    }
+
+    function syncScaleFromReferenceLine() {
+      if (state.reference.lineIndex === null || !state.reference.knownInches) {
+        state.scaleInchesPerImagePixel = null;
+        return;
+      }
+      const refLine = state.lines[state.reference.lineIndex];
+      if (!refLine) {
+        state.scaleInchesPerImagePixel = null;
+        return;
+      }
+      const lengthPx = lineLengthInImagePixels(refLine);
+      if (lengthPx <= 0) {
+        state.scaleInchesPerImagePixel = null;
+        return;
+      }
+      state.scaleInchesPerImagePixel = state.reference.knownInches / lengthPx;
     }
 
     function zoomAtCanvasPoint(targetZoom, centerCanvasX, centerCanvasY) {
@@ -454,9 +513,9 @@
         drawHeight
       );
 
-      state.lines.forEach((line, index) => drawLineOverlay(line, index + 1));
+      state.lines.forEach((line, index) => drawLineOverlay(line, index + 1, state.selectedLineIndex === index));
       if (state.draftLine) {
-        drawLineOverlay(state.draftLine, state.lines.length + 1);
+        drawLineOverlay(state.draftLine, state.lines.length + 1, true);
       }
     }
 
@@ -468,6 +527,10 @@
         state.lines = [];
         state.draftLine = null;
         state.endpointDrag = null;
+        state.selectedLineIndex = null;
+        state.scaleInchesPerImagePixel = null;
+        state.reference.lineIndex = null;
+        state.reference.knownInches = null;
         fitImageToCanvas();
         draw();
         URL.revokeObjectURL(url);
@@ -526,7 +589,16 @@
 
       if (hit) {
         state.endpointDrag = hit;
+        state.selectedLineIndex = hit.lineIndex;
         canvas.style.cursor = 'grabbing';
+        return;
+      }
+
+      const lineHitIndex = findLineHit(point.canvasX, point.canvasY);
+      if (lineHitIndex !== null) {
+        state.selectedLineIndex = lineHitIndex;
+        draw();
+        setStatus(`Selected line ${lineHitIndex + 1}. Click "Set Reference" to redefine scale.`);
         return;
       }
 
@@ -579,6 +651,8 @@
       if (state.endpointDrag) {
         state.endpointDrag = null;
         canvas.style.cursor = 'crosshair';
+        syncScaleFromReferenceLine();
+        draw();
         setStatus('Line endpoint adjusted.');
         return;
       }
@@ -596,6 +670,7 @@
       }
 
       state.lines.push(line);
+      state.selectedLineIndex = state.lines.length - 1;
       draw();
 
       if (line.type === 'reference') {
@@ -607,7 +682,45 @@
 
     setReferenceBtn.addEventListener('click', (event) => {
       event.preventDefault();
-      setStatus('Reference setup arrives in Stage 2.');
+      if (!state.image) {
+        setStatus('Upload an image first.');
+        return;
+      }
+
+      if (state.lines.length === 0) {
+        setStatus('Draw at least one line before setting reference.');
+        return;
+      }
+
+      const rawValue = Number.parseFloat(referenceValue.value);
+      if (!Number.isFinite(rawValue) || rawValue <= 0) {
+        setStatus('Enter a valid positive reference value first.');
+        return;
+      }
+
+      const targetIndex = state.selectedLineIndex ?? 0;
+      const targetLine = state.lines[targetIndex];
+      if (!targetLine) {
+        setStatus('Select a valid line to use as reference.');
+        return;
+      }
+
+      state.lines.forEach((line) => { line.type = 'measurement'; });
+      targetLine.type = 'reference';
+
+      const knownInches = referenceUnit.value === 'cm' ? rawValue / 2.54 : rawValue;
+      state.reference.lineIndex = targetIndex;
+      state.reference.knownInches = knownInches;
+      syncScaleFromReferenceLine();
+      draw();
+
+      if (!state.scaleInchesPerImagePixel) {
+        setStatus('Could not compute scale from selected reference line.');
+        return;
+      }
+
+      const knownCm = knownInches * 2.54;
+      setStatus(`Scale set from line ${targetIndex + 1}: ${knownInches.toFixed(2)} in / ${knownCm.toFixed(2)} cm.`);
     });
 
     undoBtn.addEventListener('click', () => {
@@ -623,6 +736,10 @@
       state.lines = [];
       state.draftLine = null;
       state.endpointDrag = null;
+      state.selectedLineIndex = null;
+      state.scaleInchesPerImagePixel = null;
+      state.reference.lineIndex = null;
+      state.reference.knownInches = null;
       state.viewport.zoom = 1;
       state.viewport.baseScale = 1;
       state.viewport.offsetX = 0;
