@@ -291,6 +291,7 @@
       image: null,
       lines: [],
       draftLine: null,
+      endpointDrag: null,
       viewport: {
         zoom: 1,
         minZoom: 0.2,
@@ -391,6 +392,24 @@
       ctx.fillText(label, midX, midY - 6);
     }
 
+    function findEndpointHit(canvasX, canvasY) {
+      const hitRadius = 9;
+      for (let i = state.lines.length - 1; i >= 0; i -= 1) {
+        const line = state.lines[i];
+        const start = imageToCanvasPoint(line.startX, line.startY);
+        const end = imageToCanvasPoint(line.endX, line.endY);
+        const startDist = Math.hypot(canvasX - start.x, canvasY - start.y);
+        if (startDist <= hitRadius) {
+          return { lineIndex: i, endpoint: 'start' };
+        }
+        const endDist = Math.hypot(canvasX - end.x, canvasY - end.y);
+        if (endDist <= hitRadius) {
+          return { lineIndex: i, endpoint: 'end' };
+        }
+      }
+      return null;
+    }
+
     function zoomAtCanvasPoint(targetZoom, centerCanvasX, centerCanvasY) {
       if (!state.image) return;
 
@@ -448,6 +467,7 @@
         state.image = image;
         state.lines = [];
         state.draftLine = null;
+        state.endpointDrag = null;
         fitImageToCanvas();
         draw();
         URL.revokeObjectURL(url);
@@ -502,6 +522,14 @@
     canvas.addEventListener('mousedown', (event) => {
       if (!state.image) return;
       const point = toImagePoint(event.clientX, event.clientY);
+      const hit = findEndpointHit(point.canvasX, point.canvasY);
+
+      if (hit) {
+        state.endpointDrag = hit;
+        canvas.style.cursor = 'grabbing';
+        return;
+      }
+
       const lineType = state.lines.length === 0 ? 'reference' : 'measurement';
 
       hint.textContent = '';
@@ -516,15 +544,46 @@
     });
 
     canvas.addEventListener('mousemove', (event) => {
-      if (!state.image || !state.draftLine) return;
+      if (!state.image) return;
       const point = toImagePoint(event.clientX, event.clientY);
-      state.draftLine.endX = point.imageX;
-      state.draftLine.endY = point.imageY;
-      draw();
+
+      if (state.endpointDrag) {
+        const targetLine = state.lines[state.endpointDrag.lineIndex];
+        if (!targetLine) return;
+
+        if (state.endpointDrag.endpoint === 'start') {
+          targetLine.startX = point.imageX;
+          targetLine.startY = point.imageY;
+        } else {
+          targetLine.endX = point.imageX;
+          targetLine.endY = point.imageY;
+        }
+        draw();
+        return;
+      }
+
+      if (state.draftLine) {
+        state.draftLine.endX = point.imageX;
+        state.draftLine.endY = point.imageY;
+        draw();
+        return;
+      }
+
+      const hoverHit = findEndpointHit(point.canvasX, point.canvasY);
+      canvas.style.cursor = hoverHit ? 'grab' : 'crosshair';
     });
 
     window.addEventListener('mouseup', () => {
-      if (!state.image || !state.draftLine) return;
+      if (!state.image) return;
+
+      if (state.endpointDrag) {
+        state.endpointDrag = null;
+        canvas.style.cursor = 'crosshair';
+        setStatus('Line endpoint adjusted.');
+        return;
+      }
+
+      if (!state.draftLine) return;
       const line = state.draftLine;
       const dx = line.endX - line.startX;
       const dy = line.endY - line.startY;
@@ -563,6 +622,7 @@
       state.image = null;
       state.lines = [];
       state.draftLine = null;
+      state.endpointDrag = null;
       state.viewport.zoom = 1;
       state.viewport.baseScale = 1;
       state.viewport.offsetX = 0;
