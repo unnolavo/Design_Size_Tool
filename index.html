@@ -83,6 +83,19 @@
       font-weight: 600;
     }
 
+    .control .btn-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .control button.zoom-btn {
+      min-height: 32px;
+      padding: 0 8px;
+      font-size: 0.82rem;
+      flex: 1;
+    }
+
     .control button.primary {
       background: var(--primary);
       border-color: var(--primary);
@@ -163,12 +176,10 @@
 
         <div class="control span-2">
           <label>Zoom</label>
-          <button id="zoomInBtn" type="button" disabled>Zoom +</button>
-        </div>
-
-        <div class="control span-2">
-          <label>&nbsp;</label>
-          <button id="zoomOutBtn" type="button" disabled>Zoom -</button>
+          <div class="btn-row">
+            <button id="zoomInBtn" class="zoom-btn" type="button" disabled>Zoom +</button>
+            <button id="zoomOutBtn" class="zoom-btn" type="button" disabled>Zoom -</button>
+          </div>
         </div>
 
         <div class="control span-2">
@@ -223,6 +234,13 @@
         baseScale: 1,
         offsetX: 0,
         offsetY: 0
+      },
+      pan: {
+        active: false,
+        startX: 0,
+        startY: 0,
+        originOffsetX: 0,
+        originOffsetY: 0
       }
     };
 
@@ -261,6 +279,40 @@
 
       state.viewport.offsetX = (canvas.width - drawWidth) / 2;
       state.viewport.offsetY = (canvas.height - drawHeight) / 2;
+    }
+
+    function toImagePoint(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const canvasX = ((clientX - rect.left) / rect.width) * canvas.width;
+      const canvasY = ((clientY - rect.top) / rect.height) * canvas.height;
+      const totalScale = state.viewport.baseScale * state.viewport.zoom;
+
+      return {
+        canvasX,
+        canvasY,
+        imageX: (canvasX - state.viewport.offsetX) / totalScale,
+        imageY: (canvasY - state.viewport.offsetY) / totalScale
+      };
+    }
+
+    function zoomAtCanvasPoint(targetZoom, centerCanvasX, centerCanvasY) {
+      if (!state.image) return;
+
+      const previousZoom = state.viewport.zoom;
+      const clampedZoom = clamp(targetZoom, state.viewport.minZoom, state.viewport.maxZoom);
+      if (clampedZoom === previousZoom) return;
+
+      const oldScale = state.viewport.baseScale * previousZoom;
+      const newScale = state.viewport.baseScale * clampedZoom;
+
+      const imageX = (centerCanvasX - state.viewport.offsetX) / oldScale;
+      const imageY = (centerCanvasY - state.viewport.offsetY) / oldScale;
+
+      state.viewport.zoom = clampedZoom;
+      state.viewport.offsetX = centerCanvasX - imageX * newScale;
+      state.viewport.offsetY = centerCanvasY - imageY * newScale;
+      draw();
+      setStatus(`Zoom: ${(state.viewport.zoom * 100).toFixed(0)}%`);
     }
 
     function draw() {
@@ -315,16 +367,48 @@
 
     zoomInBtn.addEventListener('click', () => {
       if (!state.image) return;
-      state.viewport.zoom = clamp(state.viewport.zoom * 1.2, state.viewport.minZoom, state.viewport.maxZoom);
-      draw();
-      setStatus(`Zoom: ${(state.viewport.zoom * 100).toFixed(0)}%`);
+      zoomAtCanvasPoint(state.viewport.zoom * 1.2, canvas.width / 2, canvas.height / 2);
     });
 
     zoomOutBtn.addEventListener('click', () => {
       if (!state.image) return;
-      state.viewport.zoom = clamp(state.viewport.zoom / 1.2, state.viewport.minZoom, state.viewport.maxZoom);
+      zoomAtCanvasPoint(state.viewport.zoom / 1.2, canvas.width / 2, canvas.height / 2);
+    });
+
+    canvas.addEventListener('wheel', (event) => {
+      if (!state.image) return;
+      event.preventDefault();
+
+      const zoomFactor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const point = toImagePoint(event.clientX, event.clientY);
+      zoomAtCanvasPoint(state.viewport.zoom * zoomFactor, point.canvasX, point.canvasY);
+    }, { passive: false });
+
+    canvas.addEventListener('mousedown', (event) => {
+      if (!state.image) return;
+      state.pan.active = true;
+      state.pan.startX = event.clientX;
+      state.pan.startY = event.clientY;
+      state.pan.originOffsetX = state.viewport.offsetX;
+      state.pan.originOffsetY = state.viewport.offsetY;
+      canvas.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (event) => {
+      if (!state.image || !state.pan.active) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
+      state.viewport.offsetX = state.pan.originOffsetX + (event.clientX - state.pan.startX) * scaleX;
+      state.viewport.offsetY = state.pan.originOffsetY + (event.clientY - state.pan.startY) * scaleY;
       draw();
-      setStatus(`Zoom: ${(state.viewport.zoom * 100).toFixed(0)}%`);
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!state.pan.active) return;
+      state.pan.active = false;
+      canvas.style.cursor = 'crosshair';
     });
 
     setReferenceBtn.addEventListener('click', (event) => {
