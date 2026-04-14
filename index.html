@@ -184,6 +184,7 @@
     .control.reference-unit { min-width: 140px; }
     .control.set-ref { min-width: 126px; }
     .control.zoom-group { min-width: 190px; }
+    .row-break { flex-basis: 100%; height: 0; }
     .controls-spacer { flex: 1; min-width: 20px; }
     .control.actions { min-width: 108px; }
   </style>
@@ -219,6 +220,8 @@
           <label>&nbsp;</label>
           <button id="setReferenceBtn" class="primary" disabled>Set Reference</button>
         </div>
+
+        <div class="row-break" aria-hidden="true"></div>
 
         <div class="control zoom-group">
           <label>Zoom</label>
