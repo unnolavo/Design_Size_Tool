@@ -607,10 +607,10 @@
       draw();
     }
 
-    panLeftBtn.addEventListener('click', () => nudgeImage(-24, 0));
-    panRightBtn.addEventListener('click', () => nudgeImage(24, 0));
-    panUpBtn.addEventListener('click', () => nudgeImage(0, -24));
-    panDownBtn.addEventListener('click', () => nudgeImage(0, 24));
+    panLeftBtn.addEventListener('click', () => nudgeImage(24, 0));
+    panRightBtn.addEventListener('click', () => nudgeImage(-24, 0));
+    panUpBtn.addEventListener('click', () => nudgeImage(0, 24));
+    panDownBtn.addEventListener('click', () => nudgeImage(0, -24));
 
     canvas.addEventListener('mousedown', (event) => {
       if (!state.image) return;
