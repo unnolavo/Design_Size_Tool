@@ -396,11 +396,12 @@
       ctx.textBaseline = 'bottom';
       const refInches = state.reference.knownInches;
       const refCm = refInches ? refInches * 2.54 : null;
+      const measuredText = line.type === 'measurement' ? formatDualUnitsFromLine(line) : null;
       const label = line.type === 'reference'
         ? (refInches
           ? `Reference: ${refInches.toFixed(2)} in / ${refCm.toFixed(2)} cm`
           : 'Reference line (set known size next)')
-        : `Line ${index}`;
+        : (measuredText ? measuredText : `Line ${index} (set reference)`);
       ctx.fillText(label, midX, midY - 6);
     }
 
@@ -449,6 +450,14 @@
 
     function lineLengthInImagePixels(line) {
       return Math.hypot(line.endX - line.startX, line.endY - line.startY);
+    }
+
+    function formatDualUnitsFromLine(line) {
+      if (!state.scaleInchesPerImagePixel) return null;
+      const lengthPx = lineLengthInImagePixels(line);
+      const inches = lengthPx * state.scaleInchesPerImagePixel;
+      const cm = inches * 2.54;
+      return `${inches.toFixed(2)} in / ${cm.toFixed(2)} cm`;
     }
 
     function syncScaleFromReferenceLine() {
@@ -676,7 +685,10 @@
       if (line.type === 'reference') {
         setStatus('Reference line drawn. Enter known value in Stage 3 flow.');
       } else {
-        setStatus(`Line ${state.lines.length} added. Measurements arrive in Stage 4.`);
+        const measuredText = formatDualUnitsFromLine(line);
+        setStatus(measuredText
+          ? `Line ${state.lines.length} added: ${measuredText}`
+          : `Line ${state.lines.length} added. Set reference to calculate measurements.`);
       }
     });
 
@@ -720,7 +732,7 @@
       }
 
       const knownCm = knownInches * 2.54;
-      setStatus(`Scale set from line ${targetIndex + 1}: ${knownInches.toFixed(2)} in / ${knownCm.toFixed(2)} cm.`);
+      setStatus(`Scale set from line ${targetIndex + 1}: ${knownInches.toFixed(2)} in / ${knownCm.toFixed(2)} cm. Draw or adjust lines to see measurements.`);
     });
 
     undoBtn.addEventListener('click', () => {
