@@ -240,6 +240,11 @@
 
         <div class="control actions">
           <label>&nbsp;</label>
+          <button id="redoBtn" type="button" disabled>Redo Last</button>
+        </div>
+
+        <div class="control actions">
+          <label>&nbsp;</label>
           <button id="clearBtn" type="button" disabled>Clear Lines</button>
         </div>
 
@@ -275,6 +280,7 @@
     const zoomInBtn = document.getElementById('zoomInBtn');
     const zoomOutBtn = document.getElementById('zoomOutBtn');
     const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
     const clearBtn = document.getElementById('clearBtn');
     const resetBtn = document.getElementById('resetBtn');
     const panUpBtn = document.getElementById('panUpBtn');
@@ -290,6 +296,7 @@
     const state = {
       image: null,
       lines: [],
+      redoStack: [],
       draftLine: null,
       endpointDrag: null,
       selectedLineIndex: null,
@@ -319,6 +326,7 @@
       zoomInBtn.disabled = !enabled;
       zoomOutBtn.disabled = !enabled;
       undoBtn.disabled = !enabled;
+      redoBtn.disabled = !enabled;
       clearBtn.disabled = !enabled;
       resetBtn.disabled = !enabled;
       panUpBtn.disabled = !enabled;
@@ -546,6 +554,7 @@
       image.onload = () => {
         state.image = image;
         state.lines = [];
+        state.redoStack = [];
         state.draftLine = null;
         state.endpointDrag = null;
         state.selectedLineIndex = null;
@@ -691,6 +700,7 @@
       }
 
       state.lines.push(line);
+      state.redoStack = [];
       state.selectedLineIndex = state.lines.length - 1;
       draw();
 
@@ -765,7 +775,10 @@
         return;
       }
 
-      state.lines.splice(lastMeasurementIndex, 1);
+      const [removedLine] = state.lines.splice(lastMeasurementIndex, 1);
+      if (removedLine) {
+        state.redoStack.push(removedLine);
+      }
       if (state.selectedLineIndex === lastMeasurementIndex) {
         state.selectedLineIndex = state.reference.lineIndex;
       } else if (state.selectedLineIndex !== null && state.selectedLineIndex > lastMeasurementIndex) {
@@ -777,6 +790,35 @@
       setStatus('Undid last measurement line.');
     });
 
+    redoBtn.addEventListener('click', () => {
+      if (!state.image) {
+        setStatus('Upload an image first.');
+        return;
+      }
+
+      if (!state.redoStack.length) {
+        setStatus('No undone measurement line to redo.');
+        return;
+      }
+
+      const lineToRestore = state.redoStack.pop();
+      if (!lineToRestore) {
+        setStatus('No undone measurement line to redo.');
+        return;
+      }
+
+      lineToRestore.type = 'measurement';
+      state.lines.push(lineToRestore);
+      state.selectedLineIndex = state.lines.length - 1;
+      reconcileReferenceState();
+      draw();
+
+      const measuredText = formatDualUnitsFromLine(lineToRestore);
+      setStatus(measuredText
+        ? `Redid line: ${measuredText}`
+        : 'Redid last measurement line.');
+    });
+
     clearBtn.addEventListener('click', () => {
       if (!state.image) {
         setStatus('Upload an image first.');
@@ -785,6 +827,7 @@
 
       const beforeCount = state.lines.length;
       state.lines = state.lines.filter((line) => line.type === 'reference');
+      state.redoStack = [];
       const removedCount = beforeCount - state.lines.length;
 
       if (removedCount === 0) {
@@ -801,6 +844,7 @@
     resetBtn.addEventListener('click', () => {
       state.image = null;
       state.lines = [];
+      state.redoStack = [];
       state.draftLine = null;
       state.endpointDrag = null;
       state.selectedLineIndex = null;
