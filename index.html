@@ -478,6 +478,18 @@
       state.scaleInchesPerImagePixel = state.reference.knownInches / lengthPx;
     }
 
+    function reconcileReferenceState() {
+      const refIndex = state.lines.findIndex((line) => line.type === 'reference');
+      if (refIndex === -1) {
+        state.reference.lineIndex = null;
+        state.reference.knownInches = null;
+        state.scaleInchesPerImagePixel = null;
+        return;
+      }
+      state.reference.lineIndex = refIndex;
+      syncScaleFromReferenceLine();
+    }
+
     function zoomAtCanvasPoint(targetZoom, centerCanvasX, centerCanvasY) {
       if (!state.image) return;
 
@@ -736,11 +748,54 @@
     });
 
     undoBtn.addEventListener('click', () => {
-      setStatus('Undo arrives in a later stage.');
+      if (!state.image) {
+        setStatus('Upload an image first.');
+        return;
+      }
+
+      const lastMeasurementIndex = (() => {
+        for (let i = state.lines.length - 1; i >= 0; i -= 1) {
+          if (state.lines[i].type === 'measurement') return i;
+        }
+        return -1;
+      })();
+
+      if (lastMeasurementIndex === -1) {
+        setStatus('No measurement lines to undo.');
+        return;
+      }
+
+      state.lines.splice(lastMeasurementIndex, 1);
+      if (state.selectedLineIndex === lastMeasurementIndex) {
+        state.selectedLineIndex = state.reference.lineIndex;
+      } else if (state.selectedLineIndex !== null && state.selectedLineIndex > lastMeasurementIndex) {
+        state.selectedLineIndex -= 1;
+      }
+
+      reconcileReferenceState();
+      draw();
+      setStatus('Undid last measurement line.');
     });
 
     clearBtn.addEventListener('click', () => {
-      setStatus('Clear lines arrives in a later stage.');
+      if (!state.image) {
+        setStatus('Upload an image first.');
+        return;
+      }
+
+      const beforeCount = state.lines.length;
+      state.lines = state.lines.filter((line) => line.type === 'reference');
+      const removedCount = beforeCount - state.lines.length;
+
+      if (removedCount === 0) {
+        setStatus('No measurement lines to clear.');
+        return;
+      }
+
+      state.selectedLineIndex = state.lines.length ? 0 : null;
+      reconcileReferenceState();
+      draw();
+      setStatus(`Cleared ${removedCount} measurement line${removedCount === 1 ? '' : 's'}.`);
     });
 
     resetBtn.addEventListener('click', () => {
