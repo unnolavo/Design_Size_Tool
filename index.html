@@ -374,7 +374,7 @@
       const hasImage = Boolean(state.image);
       const measurementCount = state.lines.filter((line) => line.type === 'measurement').length;
       setReferenceBtn.disabled = !hasImage || state.lines.length === 0;
-      undoBtn.disabled = !hasImage || measurementCount === 0;
+      undoBtn.disabled = !hasImage || state.lines.length === 0;
       redoBtn.disabled = !hasImage || state.redoStack.length === 0;
       clearBtn.disabled = !hasImage || measurementCount === 0;
     }
@@ -809,31 +809,31 @@
         return;
       }
 
-      const lastMeasurementIndex = (() => {
-        for (let i = state.lines.length - 1; i >= 0; i -= 1) {
-          if (state.lines[i].type === 'measurement') return i;
-        }
-        return -1;
-      })();
-
-      if (lastMeasurementIndex === -1) {
-        setStatus('No measurement lines to undo.');
+      const lastLineIndex = state.lines.length - 1;
+      if (lastLineIndex < 0) {
+        setStatus('No lines to undo.');
         return;
       }
 
-      const [removedLine] = state.lines.splice(lastMeasurementIndex, 1);
+      const [removedLine] = state.lines.splice(lastLineIndex, 1);
       if (removedLine) {
-        state.redoStack.push(removedLine);
+        const removedRecord = {
+          line: removedLine,
+          index: lastLineIndex,
+          wasReference: removedLine.type === 'reference',
+          knownInches: removedLine.type === 'reference' ? state.reference.knownInches : null
+        };
+        state.redoStack.push(removedRecord);
       }
-      if (state.selectedLineIndex === lastMeasurementIndex) {
+      if (state.selectedLineIndex === lastLineIndex) {
         state.selectedLineIndex = state.reference.lineIndex;
-      } else if (state.selectedLineIndex !== null && state.selectedLineIndex > lastMeasurementIndex) {
+      } else if (state.selectedLineIndex !== null && state.selectedLineIndex > lastLineIndex) {
         state.selectedLineIndex -= 1;
       }
 
       reconcileReferenceState();
       draw();
-      setStatus('Undid last measurement line.');
+      setStatus(removedLine?.type === 'reference' ? 'Undid reference line.' : 'Undid last measurement line.');
     });
 
     redoBtn.addEventListener('click', () => {
@@ -847,22 +847,41 @@
         return;
       }
 
-      const lineToRestore = state.redoStack.pop();
-      if (!lineToRestore) {
-        setStatus('No undone measurement line to redo.');
+      const redoRecord = state.redoStack.pop();
+      if (!redoRecord || !redoRecord.line) {
+        setStatus('No undone line to redo.');
         return;
       }
 
-      lineToRestore.type = 'measurement';
-      state.lines.push(lineToRestore);
-      state.selectedLineIndex = state.lines.length - 1;
+      const targetIndex = Math.max(0, Math.min(redoRecord.index ?? state.lines.length, state.lines.length));
+      state.lines.splice(targetIndex, 0, redoRecord.line);
+      state.selectedLineIndex = targetIndex;
+
+      if (redoRecord.wasReference) {
+        state.lines.forEach((line, idx) => {
+          if (idx !== targetIndex && line.type === 'reference') {
+            line.type = 'measurement';
+          }
+        });
+        state.lines[targetIndex].type = 'reference';
+        state.reference.knownInches = redoRecord.knownInches;
+      }
+
       reconcileReferenceState();
       draw();
 
-      const measuredText = formatDualUnitsFromLine(lineToRestore);
-      setStatus(measuredText
-        ? `Redid line: ${measuredText}`
-        : 'Redid last measurement line.');
+      if (redoRecord.wasReference) {
+        const knownInches = state.reference.knownInches;
+        const knownCm = knownInches ? knownInches * 2.54 : null;
+        setStatus(knownInches
+          ? `Redid reference line: ${knownInches.toFixed(2)} in / ${knownCm.toFixed(2)} cm`
+          : 'Redid reference line.');
+      } else {
+        const measuredText = formatDualUnitsFromLine(redoRecord.line);
+        setStatus(measuredText
+          ? `Redid line: ${measuredText}`
+          : 'Redid last measurement line.');
+      }
     });
 
     clearBtn.addEventListener('click', () => {
