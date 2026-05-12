@@ -454,6 +454,23 @@
           ? `Reference: ${refInches.toFixed(2)} in / ${refCm.toFixed(2)} cm`
           : 'Reference line (set known size next)')
         : (measuredText ? measuredText : `Line ${index} (set reference)`);
+
+      const textMetrics = ctx.measureText(label);
+      const textWidth = textMetrics.width;
+      const fontSize = 12;
+      const paddingX = 6;
+      const paddingY = 3;
+      const bubbleWidth = textWidth + paddingX * 2;
+      const bubbleHeight = fontSize + paddingY * 2;
+      const bubbleX = midX - bubbleWidth / 2;
+      const bubbleY = midY - 6 - bubbleHeight;
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+      ctx.beginPath();
+      ctx.roundRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 6);
+      ctx.fill();
+
+      ctx.fillStyle = strokeColor;
       ctx.fillText(label, midX, midY - 6);
     }
 
@@ -502,6 +519,23 @@
 
     function lineLengthInImagePixels(line) {
       return Math.hypot(line.endX - line.startX, line.endY - line.startY);
+    }
+
+    function applyAxisSnap(anchorX, anchorY, targetX, targetY) {
+      const snapToleranceDeg = 5;
+      const dx = targetX - anchorX;
+      const dy = targetY - anchorY;
+      const angleDeg = Math.abs(Math.atan2(dy, dx) * (180 / Math.PI));
+      const isNearHorizontal = Math.min(angleDeg, Math.abs(180 - angleDeg)) <= snapToleranceDeg;
+      const isNearVertical = Math.abs(90 - angleDeg) <= snapToleranceDeg;
+
+      if (isNearHorizontal) {
+        return { x: targetX, y: anchorY };
+      }
+      if (isNearVertical) {
+        return { x: anchorX, y: targetY };
+      }
+      return { x: targetX, y: targetY };
     }
 
     function formatDualUnitsFromLine(line) {
@@ -699,20 +733,30 @@
         const targetLine = state.lines[state.endpointDrag.lineIndex];
         if (!targetLine) return;
 
+        const anchorX = state.endpointDrag.endpoint === 'start' ? targetLine.endX : targetLine.startX;
+        const anchorY = state.endpointDrag.endpoint === 'start' ? targetLine.endY : targetLine.startY;
+        const snapped = applyAxisSnap(anchorX, anchorY, point.imageX, point.imageY);
+
         if (state.endpointDrag.endpoint === 'start') {
-          targetLine.startX = point.imageX;
-          targetLine.startY = point.imageY;
+          targetLine.startX = snapped.x;
+          targetLine.startY = snapped.y;
         } else {
-          targetLine.endX = point.imageX;
-          targetLine.endY = point.imageY;
+          targetLine.endX = snapped.x;
+          targetLine.endY = snapped.y;
         }
         draw();
         return;
       }
 
       if (state.draftLine) {
-        state.draftLine.endX = point.imageX;
-        state.draftLine.endY = point.imageY;
+        const snapped = applyAxisSnap(
+          state.draftLine.startX,
+          state.draftLine.startY,
+          point.imageX,
+          point.imageY
+        );
+        state.draftLine.endX = snapped.x;
+        state.draftLine.endY = snapped.y;
         draw();
         return;
       }
