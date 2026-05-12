@@ -443,7 +443,7 @@
       ctx.arc(end.x, end.y, 3, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.font = '12px Arial';
+      ctx.font = 'bold 12px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
       const refInches = state.reference.knownInches;
@@ -465,7 +465,7 @@
       const bubbleX = midX - bubbleWidth / 2;
       const bubbleY = midY - 6 - bubbleHeight;
 
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.86)';
       ctx.beginPath();
       ctx.roundRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 6);
       ctx.fill();
